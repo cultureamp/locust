@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import chardet
 import re
 import six
 import socket
@@ -167,13 +166,14 @@ class FastHttpSession(object):
         request_meta["start_time"] = default_timer()
         request_meta["name"] = name or path
         
+        headers = headers or {}
         if auth:
-            headers = headers or {}
             headers['Authorization'] = _construct_basic_auth_str(auth[0], auth[1])
         elif self.auth_header:
-            headers = headers or {}
             headers['Authorization'] = self.auth_header
-        
+        if not "Accept-Encoding" in headers:
+            headers['Accept-Encoding'] = "gzip, deflate"
+
         # send request, and catch any exceptions
         response = self._send_request_safe_mode(method, url, payload=data, headers=headers, **kwargs)
         
@@ -252,9 +252,9 @@ class FastResponse(CompatResponse):
         Returns the text content of the response as a decoded string
         (unicode on python2)
         """
-        # Decode unicode from detected encoding.
         try:
-            content = unicode(self.content, self.apparent_encoding, errors='replace')
+            charset = self.headers.get('content-type', '').partition("charset=")[2]
+            content = unicode(self.content, charset or 'utf-8', errors='replace')
         except (LookupError, TypeError):
             # A LookupError is raised if the encoding was not found which could
             # indicate a misspelling or similar mistake.
@@ -267,11 +267,6 @@ class FastResponse(CompatResponse):
             else:
                 content = unicode(self.content, errors='replace')
         return content
-    
-    @property
-    def apparent_encoding(self):
-        """The apparent encoding, provided by the chardet library."""
-        return chardet.detect(self.content)['encoding']
     
     def raise_for_status(self):
         """Raise any connection errors that occured during the request"""
